@@ -1,11 +1,10 @@
 {
-  "name": "ca-ticket-v2",
-  "version": "2.0.0",
+  "name": "ca-ticket-bot",
+  "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "type": "commonjs",
+  "engines": { "node": "20.x" },
   "dependencies": {
-    "discord.js": "^14.14.1"
+    "discord.js": "^14.22.1"
   }
 }
