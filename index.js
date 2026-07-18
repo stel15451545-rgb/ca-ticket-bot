@@ -68,20 +68,20 @@ function panelV2() {
     c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL('attachment://assistance.png')));
     c.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `## California Roleplay
-Welcome to Assistance section. Here you will be able to open a simple ticket of your choice to be directed towards what you desire or have internal issues. Make sure you have proof if your reporting staff members mis-leading into fake reports will get you permanently banned.
+> Welcome to Assistance section. Here you will be able to open a simple ticket of your choice to be directed towards what you desire or have internal issues. Make sure you have proof if your reporting staff members mis-leading into fake reports will get you permanently banned.
 
 **General Support Ticket**
-Use this ticket type for general questions, assistance with features or inquiries about our community rules.
+• Use this ticket type for general questions, assistance with features or inquiries about our community rules.
 
 **Internal Affairs Ticket**
-🔹 Staff Reports.
-🔹 Partnership.
-🔹 Questions.
+• Staff Reports.
+• Partnership.
+• Questions.
 
 **High Rank Ticket**
-🔹 HR Reports.
-🔹 In-Game Bug Reports.
-🔹 Question For Ownership.
+• HR Reports.
+• In-Game Bug Reports.
+• Question For Ownership.
 
 -# **2026 © California Roleplay.**`
     ));
