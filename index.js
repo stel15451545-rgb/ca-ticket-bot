@@ -40,7 +40,7 @@ ${votersText}`
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} FINAL FULL NO COLOR`);
     client.user.setPresence({
-        activities: [{ name: '.gg/carpp', type: 0, state: '.gg/carpp' }],
+        activities: [{ name: '.gg/carpp', type: 4, state: '.gg/carpp' }],
         status: 'online'
     });
     await client.application.commands.set([
