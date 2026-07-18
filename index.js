@@ -6,6 +6,10 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
+
+const SESSION_MANAGER_ID = '1477713335389655248';
+const SUPPORT_TEAM_ID = '1493988230406733874';
+
 let votes = new Set();
 
 client.once('ready', async () => {
@@ -41,23 +45,23 @@ Welcome to Assistance section. Here you will be able to open a simple ticket of 
 Use this ticket type for general questions, assistance with features or inquiries about our community rules.
 
 **Internal Affairs Ticket**
-• Staff Reports.
-• Partnership.
-• Questions.
+🔹 Staff Reports.
+🔹 Partnership.
+🔹 Questions.
 
 **High Rank Ticket**
-• HR Reports.
-• In-Game Bug Reports.
-• Question For Ownership.
+🔹 HR Reports.
+🔹 In-Game Bug Reports.
+🔹 Question For Ownership.
 
 -# **2026 © California Roleplay.**`
     ));
     c.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true));
     c.addActionRowComponents(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('select').setPlaceholder('Select Support Category').addOptions(
-            { label: 'General Ticket', value: 'general', emoji: '📩' },
-            { label: 'Internal Affairs Ticket', value: 'internal', emoji: '📩' },
-            { label: 'High Rank Ticket', value: 'highrank', emoji: '📩' }
+            { label: 'General Ticket', value: 'general' },
+            { label: 'Internal Affairs Ticket', value: 'internal' },
+            { label: 'High Rank Ticket', value: 'highrank' }
         )
     ));
     return c;
@@ -82,9 +86,9 @@ To close this ticket, use the button below.
 -# Powered by California State Utilities`
     ));
     c.addActionRowComponents(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
-        new ButtonBuilder().setCustomId('claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🙋'),
-        new ButtonBuilder().setCustomId('closerequest').setLabel('Close Request').setStyle(ButtonStyle.Secondary).setEmoji('⏰')
+        new ButtonBuilder().setCustomId('close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('closerequest').setLabel('Close Request').setStyle(ButtonStyle.Secondary)
     ));
     return c;
 }
@@ -92,6 +96,9 @@ To close this ticket, use the button below.
 client.on('interactionCreate', async i => {
     try {
         if(i.isChatInputCommand() && i.commandName === 'ticket' && i.options.getSubcommand() === 'setup') {
+            if (!i.member.roles.cache.has(SESSION_MANAGER_ID) &&!i.member.permissions.has('Administrator')) {
+                return i.reply({ flags: 64, content: 'Only Session Manager can use this.' });
+            }
             await i.channel.send({ components: [panelV2()], files: [{ attachment: './assistance.png', name: 'assistance.png' }], flags: MessageFlags.IsComponentsV2 });
             return i.reply({ flags: 64, content: 'Panel deployed successfully.' });
         }
@@ -107,7 +114,6 @@ client.on('interactionCreate', async i => {
             for(const r of allowed) overwrites.push({ id: r, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
             const ch = await i.guild.channels.create({ name: `ticket-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g,'-').slice(0,90), type: ChannelType.GuildText, parent: cat, topic: i.user.id, permissionOverwrites: overwrites });
 
-            // DÜZELTİLDİ: ping + V2 ayrı
             await ch.send({ content: `${i.user} ${tag}` });
             await ch.send({ components: [ticketOpened(label, i.user.id)], flags: MessageFlags.IsComponentsV2 });
 
@@ -116,12 +122,17 @@ client.on('interactionCreate', async i => {
 
         if(i.isChatInputCommand() && i.commandName === 'ticket') {
             const sub = i.options.getSubcommand();
+            if (sub!== 'setup') {
+                if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) {
+                    return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
+                }
+            }
             if(sub==='close'){ await i.reply({ content: 'Closing ticket...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 2000); return; }
             if(sub==='closerequest'){
                 const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
                 const cont = new ContainerBuilder()
-                  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
-                  .addActionRowComponents(new ActionRowBuilder().addComponents(
+                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
+                 .addActionRowComponents(new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary),
                         new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)
                     ));
@@ -133,6 +144,11 @@ client.on('interactionCreate', async i => {
         }
 
         if(i.isButton()){
+            if(i.customId==='close' || i.customId==='claim' || i.customId==='closerequest'){
+                if (!i.member.roles.cache.has(SUPPORT_TEAM_ID) &&!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
+                    return i.reply({ flags: 64, content: 'Only Support Team can use this button.' });
+                }
+            }
             if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
             if(i.customId==='cancel_close') return i.reply({ flags: 64, content: 'Cancelled.' });
             if(i.customId==='closerequest'){
@@ -141,16 +157,25 @@ client.on('interactionCreate', async i => {
                 return i.reply({ components:[cont], flags:MessageFlags.IsComponentsV2 });
             }
             if(i.customId==='claim'){ await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` }); }
-            if(i.customId==='vote_btn'){ if(votes.has(i.user.id)) return i.reply({ flags:64, content:'Already voted' }); votes.add(i.user.id); if(votes.size>=5){ votes.clear(); const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.`)); await i.channel.send({ components:[c], flags:MessageFlags.IsComponentsV2 }); return i.reply({ content:'✅ 5/5 Starting!' }); } return i.reply({ flags:64, content:`Voted ${votes.size}/5` }); }
+            if(i.customId==='vote_btn'){ if(votes.has(i.user.id)) return i.reply({ flags:64, content:'Already voted' }); votes.add(i.user.id); if(votes.size>=5){ votes.clear(); const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.`)); await i.channel.send({ components:[c], flags:MessageFlags.IsComponentsV2 }); return i.reply({ content:'5/5 Starting!' }); } return i.reply({ flags:64, content:`Voted ${votes.size}/5` }); }
         }
 
-        if(i.isChatInputCommand() && i.commandName === 'claim'){ await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` }); }
-        if(i.isChatInputCommand() && i.commandName === 'unclaim'){ return i.reply({ content: 'Unclaimed' }); }
+        if(i.isChatInputCommand() && i.commandName === 'claim'){
+            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can claim.' });
+            await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
+        }
+        if(i.isChatInputCommand() && i.commandName === 'unclaim'){
+            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can unclaim.' });
+            return i.reply({ content: 'Unclaimed' });
+        }
 
         if(i.isChatInputCommand() && i.commandName === 'session'){
+            if (!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
+                return i.reply({ flags: 64, content: 'Only Session Manager can use session commands.' });
+            }
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){ const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`)); return i.reply({ components:[c], flags:MessageFlags.IsComponentsV2 }); }
-            if(sub==='vote'){ votes.clear(); const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Vote\n> 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary).setEmoji('🗳️'))); return i.reply({ components:[c], flags:MessageFlags.IsComponentsV2 }); }
+            if(sub==='vote'){ votes.clear(); const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Vote\n> 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary))); return i.reply({ components:[c], flags:MessageFlags.IsComponentsV2 }); }
             if(sub==='startup'){ const v=i.options.getString('voters')||'No voters'; const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`)); await i.reply({ content: '@here' }); return i.followUp({ components:[c], flags:MessageFlags.IsComponentsV2 }); }
             if(sub==='full'){ const ts=Math.floor(Date.now()/1000); const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`)); return i.reply({ components:[c], flags:MessageFlags.IsComponentsV2 }); }
         }
