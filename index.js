@@ -1,7 +1,7 @@
 const http = require('http');
 http.createServer((req,res)=>{ res.writeHead(200); res.end('CA Bot Live'); }).listen(process.env.PORT || 3000);
 
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
@@ -19,18 +19,24 @@ function getBannerGallery(){
     return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL));
 }
 
+function hasSupportRole(member){
+    if(!member) return false;
+    if(member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
+    return member.roles.cache.has(SUPPORT_TEAM_ID) || member.roles.cache.has(SESSION_MANAGER_ID) || ROLES.hr.some(r => member.roles.cache.has(r)) || member.roles.cache.has(ROLES.staff);
+}
+
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
     const c = new ContainerBuilder()
- .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
 ${votersText}`
     ))
- .addMediaGalleryComponents(getBannerGallery())
- .addActionRowComponents(new ActionRowBuilder().addComponents(
+.addMediaGalleryComponents(getBannerGallery())
+.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)
     ));
@@ -96,7 +102,7 @@ function panelV2() {
     return c;
 }
 
-function ticketOpened(label, userId, staffId) {
+function ticketOpened(label, userId) {
     const c = new ContainerBuilder();
     c.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `## ${label}
@@ -110,9 +116,7 @@ A staff member will be with you shortly to address your inquiry. To help us assi
 🔹 Do not ping the staff; we have been notified.
 🔹 Keep the conversation professional.
 
-To close this ticket, use the button below.
-
--# Opened for <@${userId}>`
+To close this ticket, use the button below.`
     ));
     c.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger),
@@ -124,7 +128,7 @@ To close this ticket, use the button below.
 
 function buildCloseRequest(ownerId, requesterId){
     return new ContainerBuilder()
- .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+.addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `## Close Request
 Hi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to have your ticket closed, press the cancel button. If you think that your ticket is completed, press the continue button.
 
@@ -132,7 +136,7 @@ If there is no reply for 24+ hours, we'll close this.
 
 -# Requested by <@${requesterId}>`
     ))
- .addActionRowComponents(new ActionRowBuilder().addComponents(
+.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)
     ));
@@ -159,16 +163,14 @@ client.on('interactionCreate', async i => {
             for(const r of allowed) overwrites.push({ id: r, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
             const ch = await i.guild.channels.create({ name: `ticket-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g,'-').slice(0,90), type: ChannelType.GuildText, parent: cat, topic: i.user.id, permissionOverwrites: overwrites });
             await ch.send({ content: `${i.user} ${tag}` });
-            await ch.send({ components: [ticketOpened(label, i.user.id, null)], flags: MessageFlags.IsComponentsV2 });
+            await ch.send({ components: [ticketOpened(label, i.user.id)], flags: MessageFlags.IsComponentsV2 });
             return i.editReply({ content: `Ticket created: ${ch}` });
         }
 
         if(i.isChatInputCommand() && i.commandName === 'ticket') {
             const sub = i.options.getSubcommand();
-            if (sub!== 'setup') {
-                if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) {
-                    return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
-                }
+            if (sub!== 'setup' &&!hasSupportRole(i.member)) {
+                return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
             }
             if(sub==='close'){ await i.reply({ content: 'Closing ticket...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 2000); return; }
             if(sub==='closerequest'){
@@ -181,19 +183,7 @@ client.on('interactionCreate', async i => {
         }
 
         if(i.isButton()){
-            if(i.customId==='close' || i.customId==='claim' || i.customId==='closerequest'){
-                if (!i.member.roles.cache.has(SUPPORT_TEAM_ID) &&!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
-                    return i.reply({ flags: 64, content: 'Only Support Team can use this button.' });
-                }
-            }
-            if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
-            if(i.customId==='cancel_close') return i.reply({ flags: 64, content: 'Cancelled.' });
-            if(i.customId==='closerequest'){
-                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
-                return i.reply({ content: `<@${owner}>`, components: [buildCloseRequest(owner, i.user.id)], flags: MessageFlags.IsComponentsV2 });
-            }
-            if(i.customId==='claim'){ await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` }); }
-
+            // Vote butonu herkes kullanabilir
             if(i.customId==='vote_btn'){
                 if(votes.has(i.user.id)) return i.reply({ flags:64, content:'You have already voted.' });
                 votes.add(i.user.id);
@@ -201,8 +191,8 @@ client.on('interactionCreate', async i => {
                 if(votes.size>=5){
                     const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
                     const c=new ContainerBuilder()
-                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
-                 .addMediaGalleryComponents(getBannerGallery());
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
+                .addMediaGalleryComponents(getBannerGallery());
                     await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     votes.clear(); voteUsers = [];
@@ -211,20 +201,38 @@ client.on('interactionCreate', async i => {
                 await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                 return i.reply({ flags:64, content:`Your vote counted! (${votes.size}/5)` });
             }
+
+            // Ticket butonları - sadece support
+            if(['close','claim','closerequest','close_confirm','cancel_close'].includes(i.customId)){
+                if(!hasSupportRole(i.member)){
+                    return i.reply({ flags: 64, content: 'Only Support Team can use this button.' });
+                }
+            }
+
+            if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
+            if(i.customId==='cancel_close') return i.reply({ content: 'Cancelled.', flags: 64 });
+            if(i.customId==='closerequest'){
+                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0] || '0';
+                return i.reply({ content: `<@${owner}>`, components: [buildCloseRequest(owner, i.user.id)], flags: MessageFlags.IsComponentsV2 });
+            }
+            if(i.customId==='claim'){
+                await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true});
+                return i.reply({ content: `Claimed by ${i.user}` });
+            }
         }
 
         if(i.isChatInputCommand() && i.commandName === 'claim'){
-            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can claim.' });
-            await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
+            if (!hasSupportRole(i.member)) return i.reply({ flags: 64, content: 'Only Support Team can claim.' });
+            await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}); return i.reply({ content: `Claimed by ${i.user}` });
         }
         if(i.isChatInputCommand() && i.commandName === 'unclaim'){
-            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can unclaim.' });
+            if (!hasSupportRole(i.member)) return i.reply({ flags: 64, content: 'Only Support Team can unclaim.' });
             return i.reply({ content: 'Unclaimed' });
         }
 
         if(i.isChatInputCommand() && i.commandName === 'session'){
-            if (!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
-                return i.reply({ flags: 64, content: 'Only Session Manager can use session commands.' });
+            if (!hasSupportRole(i.member) &&!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
+                if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) return i.reply({ flags: 64, content: 'Only Session Manager can use session commands.' });
             }
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){
