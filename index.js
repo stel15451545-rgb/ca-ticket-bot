@@ -243,4 +243,11 @@ client.on('interactionCreate', async i => {
             }
             if(sub==='full'){
                 const ts=Math.floor(Date.now()/1000);
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join
+                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`)).addMediaGalleryComponents(getBannerGallery());
+                return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+            }
+        }
+    } catch(e){ console.error(e); if(i.deferred) await i.editReply({ content:'Error: '+e.message }).catch(()=>{}); else if(!i.replied) await i.reply({ flags:64, content:'Error: '+e.message }).catch(()=>{}); }
+});
+
+client.login(process.env.TOKEN);
