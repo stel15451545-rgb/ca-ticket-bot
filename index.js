@@ -45,14 +45,14 @@ Welcome to Assistance section. Here you will be able to open a simple ticket of 
 Use this ticket type for general questions, assistance with features or inquiries about our community rules.
 
 **Internal Affairs Ticket**
-🔹 Staff Reports.
-🔹 Partnership.
-🔹 Questions.
+• Staff Reports.
+• Partnership.
+• Questions.
 
 **High Rank Ticket**
-🔹 HR Reports.
-🔹 In-Game Bug Reports.
-🔹 Question For Ownership.
+• HR Reports.
+• In-Game Bug Reports.
+• Question For Ownership.
 
 -# **2026 © California Roleplay.**`
     ));
@@ -78,8 +78,8 @@ Thank you for contacting the assistance. Your ticket has been successfully creat
 A staff member will be with you shortly to address your inquiry. To help us assist you faster, please provide any relevant details or documents related to your request while you wait.
 
 **Instructions:**
-🔹 Do not ping the staff; we have been notified.
-🔹 Keep the conversation professional.
+• Do not ping the staff; we have been notified.
+• Keep the conversation professional.
 
 To close this ticket, use the button below.
 
