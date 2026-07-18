@@ -22,15 +22,15 @@ function getBannerGallery(){
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
     const c = new ContainerBuilder()
-  .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+ .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
 ${votersText}`
     ))
-  .addMediaGalleryComponents(getBannerGallery())
-  .addActionRowComponents(new ActionRowBuilder().addComponents(
+ .addMediaGalleryComponents(getBannerGallery())
+ .addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)
     ));
@@ -112,7 +112,7 @@ A staff member will be with you shortly to address your inquiry. To help us assi
 
 To close this ticket, use the button below.
 
--# Opened for <@${userId}> | Handled by <@${staffId || 'staff'}>`
+-# Opened for <@${userId}>`
     ));
     c.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger),
@@ -124,7 +124,7 @@ To close this ticket, use the button below.
 
 function buildCloseRequest(ownerId, requesterId){
     return new ContainerBuilder()
-  .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+ .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `## Close Request
 Hi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to have your ticket closed, press the cancel button. If you think that your ticket is completed, press the continue button.
 
@@ -132,7 +132,7 @@ If there is no reply for 24+ hours, we'll close this.
 
 -# Requested by <@${requesterId}>`
     ))
-  .addActionRowComponents(new ActionRowBuilder().addComponents(
+ .addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)
     ));
@@ -201,8 +201,8 @@ client.on('interactionCreate', async i => {
                 if(votes.size>=5){
                     const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
                     const c=new ContainerBuilder()
-                  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
-                  .addMediaGalleryComponents(getBannerGallery());
+                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
+                 .addMediaGalleryComponents(getBannerGallery());
                     await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     votes.clear(); voteUsers = [];
@@ -229,22 +229,25 @@ client.on('interactionCreate', async i => {
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){
                 const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`)).addMediaGalleryComponents(getBannerGallery());
-                return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                return i.reply({ flags: 64, content: '✅ Shutdown sent' });
             }
             if(sub==='vote'){
                 votes.clear(); voteUsers = [];
-                return i.reply({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                await i.channel.send({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                return i.reply({ flags: 64, content: '✅ Vote panel sent' });
             }
             if(sub==='startup'){
                 const v=i.options.getString('voters')||'No voters';
                 const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`)).addMediaGalleryComponents(getBannerGallery());
-                await i.reply({ content: '@here' });
-                return i.followUp({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                await i.channel.send({ content: '@here', components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                return i.reply({ flags: 64, content: '✅ Startup sent' });
             }
             if(sub==='full'){
                 const ts=Math.floor(Date.now()/1000);
                 const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`)).addMediaGalleryComponents(getBannerGallery());
-                return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                return i.reply({ flags: 64, content: '✅ Full sent' });
             }
         }
     } catch(e){ console.error(e); if(i.deferred) await i.editReply({ content:'Error: '+e.message }).catch(()=>{}); else if(!i.replied) await i.reply({ flags:64, content:'Error: '+e.message }).catch(()=>{}); }
