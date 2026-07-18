@@ -1,12 +1,11 @@
 const http = require('http');
 http.createServer((req,res)=>{ res.writeHead(200); res.end('CA Bot Live'); }).listen(process.env.PORT || 3000);
 
-const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, MediaGalleryBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
-
 const SESSION_MANAGER_ID = '1477713335389655248';
 const SUPPORT_TEAM_ID = '1493988230406733874';
 const BANNER_FILE = './LAB_1.png';
@@ -16,27 +15,34 @@ let votes = new Set();
 let voteUsers = [];
 
 function getBannerGallery(){
-    return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL));
+    try { return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL)); } catch { return null; }
 }
 
+// FIXLENMIS - ARTIK HATA FIRLATMIYOR
 function hasSupportRole(member){
     if(!member) return false;
-    if(member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
-    return member.roles.cache.has(SUPPORT_TEAM_ID) || member.roles.cache.has(SESSION_MANAGER_ID) || ROLES.hr.some(r => member.roles.cache.has(r)) || member.roles.cache.has(ROLES.staff);
+    try {
+        if(member.permissions?.has?.(PermissionsBitField.Flags.Administrator)) return true;
+        const cache = member.roles?.cache;
+        if(!cache) return false;
+        if(cache.has(SUPPORT_TEAM_ID) || cache.has(SESSION_MANAGER_ID) || cache.has(ROLES.staff)) return true;
+        return ROLES.hr.some(r => cache.has(r));
+    } catch { return false; }
 }
 
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
     const c = new ContainerBuilder()
-.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+   .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
 ${votersText}`
-    ))
-.addMediaGalleryComponents(getBannerGallery())
-.addActionRowComponents(new ActionRowBuilder().addComponents(
+    ));
+    const gallery = getBannerGallery();
+    if(gallery) c.addMediaGalleryComponents(gallery);
+    c.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)
     ));
@@ -44,7 +50,7 @@ ${votersText}`
 }
 
 client.once('ready', async () => {
-    console.log(`✅ ${client.user.tag} FINAL FULL NO COLOR`);
+    console.log(`✅ ${client.user.tag} FIXED`);
     client.user.setPresence({
         activities: [{ name: '.gg/carpp', type: 0, state: 'Apply for California State Roleplay Staff Team!' }],
         status: 'online'
@@ -145,9 +151,7 @@ If there is no reply for 24+ hours, we'll close this.
 client.on('interactionCreate', async i => {
     try {
         if(i.isChatInputCommand() && i.commandName === 'ticket' && i.options.getSubcommand() === 'setup') {
-            if (!i.member.roles.cache.has(SESSION_MANAGER_ID) &&!i.member.permissions.has('Administrator')) {
-                return i.reply({ flags: 64, content: 'Only Session Manager can use this.' });
-            }
+            if (!hasSupportRole(i.member)) return i.reply({ flags: 64, content: 'Only Session Manager can use this.' });
             await i.channel.send({ components: [panelV2()], files: [{ attachment: './assistance.png', name: 'assistance.png' }], flags: MessageFlags.IsComponentsV2 });
             return i.reply({ flags: 64, content: 'Panel deployed successfully.' });
         }
@@ -169,12 +173,10 @@ client.on('interactionCreate', async i => {
 
         if(i.isChatInputCommand() && i.commandName === 'ticket') {
             const sub = i.options.getSubcommand();
-            if (sub!== 'setup' &&!hasSupportRole(i.member)) {
-                return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
-            }
-            if(sub==='close'){ await i.reply({ content: 'Closing ticket...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 2000); return; }
+            if (sub!== 'setup' &&!hasSupportRole(i.member)) return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
+            if(sub==='close'){ await i.reply({ content: 'Closing ticket...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
             if(sub==='closerequest'){
-                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
+                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0] || i.user.id;
                 return i.reply({ content: `<@${owner}>`, components: [buildCloseRequest(owner, i.user.id)], flags: MessageFlags.IsComponentsV2 });
             }
             if(sub==='rename'){ await i.channel.setName(i.options.getString('name')); return i.reply({ content: `Renamed.` }); }
@@ -183,40 +185,42 @@ client.on('interactionCreate', async i => {
         }
 
         if(i.isButton()){
-            // Vote butonu herkes kullanabilir
             if(i.customId==='vote_btn'){
                 if(votes.has(i.user.id)) return i.reply({ flags:64, content:'You have already voted.' });
                 votes.add(i.user.id);
                 voteUsers.push({ id: i.user.id, tag: i.user.username });
                 if(votes.size>=5){
                     const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
-                    const c=new ContainerBuilder()
-                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
-                .addMediaGalleryComponents(getBannerGallery());
-                    await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
-                    await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                    const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`));
+                    const g = getBannerGallery(); if(g) c.addMediaGalleryComponents(g);
+                    await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 }).catch(()=>{});
+                    await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 }).catch(()=>{});
                     votes.clear(); voteUsers = [];
                     return i.reply({ flags:64, content:'5/5 - Session starting!' });
                 }
-                await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 }).catch(()=>{});
                 return i.reply({ flags:64, content:`Your vote counted! (${votes.size}/5)` });
             }
 
-            // Ticket butonları - sadece support
+            // TICKET BUTONLARI - SAFE CHECK
             if(['close','claim','closerequest','close_confirm','cancel_close'].includes(i.customId)){
                 if(!hasSupportRole(i.member)){
                     return i.reply({ flags: 64, content: 'Only Support Team can use this button.' });
                 }
             }
 
-            if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
+            if(i.customId==='close' || i.customId==='close_confirm'){
+                await i.reply({ content: 'Closing...' });
+                setTimeout(()=> i.channel.delete().catch(err => console.log("Delete error:", err.message)), 1500);
+                return;
+            }
             if(i.customId==='cancel_close') return i.reply({ content: 'Cancelled.', flags: 64 });
             if(i.customId==='closerequest'){
                 const owner = i.channel.topic?.match(/\d{17,20}/)?.[0] || '0';
                 return i.reply({ content: `<@${owner}>`, components: [buildCloseRequest(owner, i.user.id)], flags: MessageFlags.IsComponentsV2 });
             }
             if(i.customId==='claim'){
-                await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true});
+                await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}).catch(()=>{});
                 return i.reply({ content: `Claimed by ${i.user}` });
             }
         }
@@ -231,12 +235,11 @@ client.on('interactionCreate', async i => {
         }
 
         if(i.isChatInputCommand() && i.commandName === 'session'){
-            if (!hasSupportRole(i.member) &&!i.member.roles.cache.has(SESSION_MANAGER_ID)) {
-                if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) return i.reply({ flags: 64, content: 'Only Session Manager can use session commands.' });
-            }
+            if (!hasSupportRole(i.member)) return i.reply({ flags: 64, content: 'Only Session Manager can use session commands.' });
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`)).addMediaGalleryComponents(getBannerGallery());
+                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`));
+                const g = getBannerGallery(); if(g) c.addMediaGalleryComponents(g);
                 await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                 return i.reply({ flags: 64, content: '✅ Shutdown sent' });
             }
@@ -247,18 +250,20 @@ client.on('interactionCreate', async i => {
             }
             if(sub==='startup'){
                 const v=i.options.getString('voters')||'No voters';
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`)).addMediaGalleryComponents(getBannerGallery());
+                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`));
+                const g = getBannerGallery(); if(g) c.addMediaGalleryComponents(g);
                 await i.channel.send({ content: '@here', components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                 return i.reply({ flags: 64, content: '✅ Startup sent' });
             }
             if(sub==='full'){
                 const ts=Math.floor(Date.now()/1000);
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`)).addMediaGalleryComponents(getBannerGallery());
+                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`));
+                const g = getBannerGallery(); if(g) c.addMediaGalleryComponents(g);
                 await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                 return i.reply({ flags: 64, content: '✅ Full sent' });
             }
         }
-    } catch(e){ console.error(e); if(i.deferred) await i.editReply({ content:'Error: '+e.message }).catch(()=>{}); else if(!i.replied) await i.reply({ flags:64, content:'Error: '+e.message }).catch(()=>{}); }
+    } catch(e){ console.error("GLOBAL ERROR:", e); if(i.deferred) await i.editReply({ content:'Error: '+e.message }).catch(()=>{}); else if(!i.replied) await i.reply({ flags:64, content:'Error: '+e.message }).catch(()=>{}); }
 });
 
 client.login(process.env.TOKEN);
