@@ -24,6 +24,7 @@ function buildVotePanel() {
     const c = new ContainerBuilder()
    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
+-# **Ping:** @here | <@&1477713335314157784>
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
