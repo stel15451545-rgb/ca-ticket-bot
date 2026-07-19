@@ -40,7 +40,7 @@ ${votersText}`
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} FINAL FULL NO COLOR`);
     client.user.setPresence({
-        activities: [{ name: '.gg/carpp', type: 4, state: 'Join our server and apply for CARPP!' }],
+        activities: [{ name: '.gg/carpp', type: 0, state: 'Join our server and apply for CARPP!' }],
         status: 'online'
     });
     await client.application.commands.set([
@@ -67,23 +67,23 @@ function panelV2() {
     const c = new ContainerBuilder();
     c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL('attachment://assistance.png')));
     c.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-`## California Roleplay
-Welcome to Assistance section. Here you will be able to open a simple ticket of your choice to be directed towards what you desire or have internal issues. Make sure you have proof if your reporting staff members mis-leading into fake reports will get you permanently banned.
+`## California State Roleplay
+> Welcome to Assistance section. Here you will be able to open a simple ticket of your choice to be directed towards what you desire or have internal issues. Make sure you have proof if your reporting staff members mis-leading into fake reports will get you permanently banned.
 
 **General Support Ticket**
-Use this ticket type for general questions, assistance with features or inquiries about our community rules.
+• Use this ticket type for general questions, assistance with features or inquiries about our community rules.
 
 **Internal Affairs Ticket**
-🔹 Staff Reports.
-🔹 Partnership.
-🔹 Questions.
+• Staff Reports.
+• Partnership.
+• Questions.
 
 **High Rank Ticket**
-🔹 HR Reports.
-🔹 In-Game Bug Reports.
-🔹 Question For Ownership.
+• HR Reports.
+• In-Game Bug Reports.
+• Question For Ownership.
 
--# **2026 © California Roleplay.**`
+-# **2026 © California State Roleplay.**`
     ));
     c.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true));
     c.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -180,7 +180,10 @@ client.on('interactionCreate', async i => {
             if(i.customId==='cancel_close') return i.reply({ flags: 64, content: 'Cancelled.' });
             if(i.customId==='closerequest'){
                 const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
-                const cont = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`Close request for <@${owner}>`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)));
+                const cont = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Close Request
+Hi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to have your ticket closed, press the cancel button. If you think that your ticket is completed, press the continue button.
+
+If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)));
                 return i.reply({ components:[cont], flags:MessageFlags.IsComponentsV2 });
             }
             if(i.customId==='claim'){ await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` }); }
