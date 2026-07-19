@@ -179,7 +179,7 @@ client.on('interactionCreate', async i => {
             if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
             if(i.customId==='cancel_close') return i.reply({ flags: 64, content: 'Cancelled.' });
             if(i.customId==='closerequest'){
-                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
+                const ownerId = i.channel.topic?.match(/\d{17,20}/)?.[0];
                 const cont = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Close Request
 Hi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to have your ticket closed, press the cancel button. If you think that your ticket is completed, press the continue button.
 
