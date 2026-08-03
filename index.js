@@ -1,8 +1,13 @@
 const http = require('http');
 http.createServer((req,res)=>{ res.writeHead(200); res.end('CA Bot Live'); }).listen(process.env.PORT || 3000);
 
-const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const fs = require('fs');
+const path = require('path');
+const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, FileBuilder } = require('discord.js');
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+
+// ====== BURAYI DOLDUR ======
+const TICKET_LOGS_CHANNEL = '1499999999999999999'; // log kanal id
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
@@ -15,6 +20,9 @@ const BANNER_URL = 'attachment://LAB_1.png';
 let votes = new Set();
 let voteUsers = [];
 
+// --- TICKET LOGS DATA ---
+const ticketsData = new Map();
+
 function getBannerGallery(){
     return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL));
 }
@@ -22,20 +30,77 @@ function getBannerGallery(){
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
     const c = new ContainerBuilder()
-   .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+  .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
-**Ping:** @here | <@&1477713335314157784>
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
 ${votersText}`
     ))
-   .addMediaGalleryComponents(getBannerGallery())
-   .addActionRowComponents(new ActionRowBuilder().addComponents(
+  .addMediaGalleryComponents(getBannerGallery())
+  .addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)
     ));
     return c;
+}
+
+// --- LOG FONKSİYONU ---
+async function closeTicketWithLog(channel, closerUser){
+    const data = ticketsData.get(channel.id);
+    const logCh = await channel.guild.channels.fetch(TICKET_LOGS_CHANNEL).catch(()=>null);
+    if(!logCh) {
+        ticketsData.delete(channel.id);
+        return channel.delete().catch(()=>{});
+    }
+
+    try{
+        const msgs = await channel.messages.fetch({ limit: 100 });
+        const sorted = msgs.sort((a,b) => a.createdTimestamp - b.createdTimestamp);
+        let transcript = `Transcript for ${channel.name} - ${new Date().toLocaleString('tr-TR')}\n\n`;
+        sorted.forEach(m => {
+            transcript += `[${new Date(m.createdTimestamp).toLocaleString('tr-TR')}] ${m.author.tag}: ${m.content || '[Embed/Attachment]'}\n`;
+        });
+
+        const fileName = `transcript-${channel.name}-${Date.now()}.txt`;
+        const filePath = path.join(__dirname, fileName);
+        fs.writeFileSync(filePath, transcript, 'utf8');
+
+        const openedAt = data? new Date(data.openedAt) : new Date();
+        const closedAt = new Date();
+
+        const openedByText = data? `${data.openedByTag}:${data.openedBy}` : 'Unknown:Unknown';
+        const claimedByText = data?.claimedBy? `${data.claimedByTag}:${data.claimedBy}` : 'None:None';
+        const closedByText = `${closerUser.tag}:${closerUser.id}`;
+        const totalMsg = data? data.messages : msgs.size;
+
+        const logContainer = new ContainerBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+`### Ticket Information
+Opened By:
+\`${openedByText}\`
+Claimed By: \`${claimedByText}\`
+Closed By:
+\`${closedByText}\`
+---
+### Misc Information
+Total Messages: \`${totalMsg}\`
+Closed At: ${closedAt.toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' })}
+Opened At: ${openedAt.toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' })}`
+        ))
+      .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
+
+        await logCh.send({
+            components: [logContainer],
+            files: [{ attachment: filePath, name: `transcript-${channel.name}.txt` }],
+            flags: MessageFlags.IsComponentsV2
+        });
+
+        fs.unlinkSync(filePath);
+    } catch(e){ console.error('Log error:', e); }
+
+    ticketsData.delete(channel.id);
+    await channel.delete().catch(()=>{});
 }
 
 client.once('ready', async () => {
@@ -123,6 +188,14 @@ To close this ticket, use the button below.
     return c;
 }
 
+// Mesaj sayacı
+client.on('messageCreate', async (msg) => {
+    if(msg.author.bot) return;
+    if(ticketsData.has(msg.channel.id)){
+        ticketsData.get(msg.channel.id).messages++;
+    }
+});
+
 client.on('interactionCreate', async i => {
     try {
         if(i.isChatInputCommand() && i.commandName === 'ticket' && i.options.getSubcommand() === 'setup') {
@@ -143,6 +216,16 @@ client.on('interactionCreate', async i => {
             const overwrites = [{ id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] }];
             for(const r of allowed) overwrites.push({ id: r, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
             const ch = await i.guild.channels.create({ name: `ticket-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g,'-').slice(0,90), type: ChannelType.GuildText, parent: cat, topic: i.user.id, permissionOverwrites: overwrites });
+
+            ticketsData.set(ch.id, {
+                openedBy: i.user.id,
+                openedByTag: i.user.tag,
+                claimedBy: null,
+                claimedByTag: null,
+                openedAt: Date.now(),
+                messages: 0
+            });
+
             await ch.send({ content: `${i.user} ${tag}` });
             await ch.send({ components: [ticketOpened(label, i.user.id)], flags: MessageFlags.IsComponentsV2 });
             return i.editReply({ content: `Ticket created: ${ch}` });
@@ -155,12 +238,16 @@ client.on('interactionCreate', async i => {
                     return i.reply({ flags: 64, content: 'Only Support Team can use ticket commands.' });
                 }
             }
-            if(sub==='close'){ await i.reply({ content: 'Closing ticket...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 2000); return; }
+            if(sub==='close'){
+                await i.reply({ content: 'Closing ticket and logging...' });
+                await closeTicketWithLog(i.channel, i.user);
+                return;
+            }
             if(sub==='closerequest'){
                 const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
                 const cont = new ContainerBuilder()
-               .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
-               .addActionRowComponents(new ActionRowBuilder().addComponents(
+              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
+              .addActionRowComponents(new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary),
                         new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)
                     ));
@@ -177,7 +264,11 @@ client.on('interactionCreate', async i => {
                     return i.reply({ flags: 64, content: 'Only Support Team can use this button.' });
                 }
             }
-            if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing...' }); setTimeout(()=> i.channel.delete().catch(()=>{}), 1500); return; }
+            if(i.customId==='close' || i.customId==='close_confirm'){
+                await i.reply({ content: 'Closing and logging transcript...' });
+                await closeTicketWithLog(i.channel, i.user);
+                return;
+            }
             if(i.customId==='cancel_close') return i.reply({ flags: 64, content: 'Cancelled.' });
             if(i.customId==='closerequest'){
                 const ownerId = i.channel.topic?.match(/\d{17,20}/)?.[0];
@@ -187,7 +278,13 @@ Hi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to 
 If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)));
                 return i.reply({ components:[cont], flags:MessageFlags.IsComponentsV2 });
             }
-            if(i.customId==='claim'){ await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` }); }
+            if(i.customId==='claim'){
+                if(ticketsData.has(i.channel.id)){
+                    ticketsData.get(i.channel.id).claimedBy = i.user.id;
+                    ticketsData.get(i.channel.id).claimedByTag = i.user.tag;
+                }
+                await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
+            }
 
             if(i.customId==='vote_btn'){
                 if(votes.has(i.user.id)) return i.reply({ flags:64, content:'You have already voted.' });
@@ -197,8 +294,8 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
                 if(votes.size>=5){
                     const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
                     const c=new ContainerBuilder()
-                   .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
-                   .addMediaGalleryComponents(getBannerGallery());
+                  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
+                  .addMediaGalleryComponents(getBannerGallery());
                     await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     votes.clear();
@@ -212,10 +309,18 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
 
         if(i.isChatInputCommand() && i.commandName === 'claim'){
             if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can claim.' });
+            if(ticketsData.has(i.channel.id)){
+                ticketsData.get(i.channel.id).claimedBy = i.user.id;
+                ticketsData.get(i.channel.id).claimedByTag = i.user.tag;
+            }
             await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
         }
         if(i.isChatInputCommand() && i.commandName === 'unclaim'){
             if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ flags: 64, content: 'Only Support Team can unclaim.' });
+            if(ticketsData.has(i.channel.id)){
+                ticketsData.get(i.channel.id).claimedBy = null;
+                ticketsData.get(i.channel.id).claimedByTag = null;
+            }
             return i.reply({ content: 'Unclaimed' });
         }
 
@@ -226,28 +331,28 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){
                 const c=new ContainerBuilder()
-               .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`))
-               .addMediaGalleryComponents(getBannerGallery());
+              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`))
+              .addMediaGalleryComponents(getBannerGallery());
                 return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
             if(sub==='vote'){
                 votes.clear();
                 voteUsers = [];
-                return i.reply({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
+                return i.reply({ content: `@here <@&1477713335314157784>`, components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2, allowedMentions: { parse: ['everyone','roles'] } });
             }
             if(sub==='startup'){
                 const v=i.options.getString('voters')||'No voters';
                 const c=new ContainerBuilder()
-               .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`))
-               .addMediaGalleryComponents(getBannerGallery());
+              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`))
+              .addMediaGalleryComponents(getBannerGallery());
                 await i.reply({ content: '@here' });
                 return i.followUp({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
             if(sub==='full'){
                 const ts=Math.floor(Date.now()/1000);
                 const c=new ContainerBuilder()
-               .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`))
-               .addMediaGalleryComponents(getBannerGallery());
+              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`))
+              .addMediaGalleryComponents(getBannerGallery());
                 return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
         }
