@@ -7,7 +7,7 @@ const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, Permissions
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
 // ====== BURAYI DOLDUR ======
-const TICKET_LOGS_CHANNEL = '1499999999999999999'; // log kanal id
+const TICKET_LOGS_CHANNEL = '1493988234085269654'; // log kanal id
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
