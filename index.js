@@ -1,13 +1,10 @@
 const http = require('http');
 http.createServer((req,res)=>{ res.writeHead(200); res.end('CA Bot Live'); }).listen(process.env.PORT || 3000);
 
-const fs = require('fs');
-const path = require('path');
-const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, FileBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, FileBuilder } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
-// ====== BURAYI DOLDUR ======
-const TICKET_LOGS_CHANNEL = '1493988234085269654'; // log kanal id
+const TICKET_LOGS_CHANNEL = '1493988234085269654';
 
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
@@ -19,8 +16,6 @@ const BANNER_URL = 'attachment://LAB_1.png';
 
 let votes = new Set();
 let voteUsers = [];
-
-// --- TICKET LOGS DATA ---
 const ticketsData = new Map();
 
 function getBannerGallery(){
@@ -30,22 +25,21 @@ function getBannerGallery(){
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
     const c = new ContainerBuilder()
-  .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+ .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `# Session Vote
 > 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.
 
 **Voters:**
 ${votersText}`
     ))
-  .addMediaGalleryComponents(getBannerGallery())
-  .addActionRowComponents(new ActionRowBuilder().addComponents(
+ .addMediaGalleryComponents(getBannerGallery())
+ .addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)
     ));
     return c;
 }
 
-// --- LOG FONKSİYONU ---
 async function closeTicketWithLog(channel, closerUser){
     const data = ticketsData.get(channel.id);
     const logCh = await channel.guild.channels.fetch(TICKET_LOGS_CHANNEL).catch(()=>null);
@@ -53,7 +47,6 @@ async function closeTicketWithLog(channel, closerUser){
         ticketsData.delete(channel.id);
         return channel.delete().catch(()=>{});
     }
-
     try{
         const msgs = await channel.messages.fetch({ limit: 100 });
         const sorted = msgs.sort((a,b) => a.createdTimestamp - b.createdTimestamp);
@@ -62,20 +55,16 @@ async function closeTicketWithLog(channel, closerUser){
             transcript += `[${new Date(m.createdTimestamp).toLocaleString('tr-TR')}] ${m.author.tag}: ${m.content || '[Embed/Attachment]'}\n`;
         });
 
-        const fileName = `transcript-${channel.name}-${Date.now()}.txt`;
-        const filePath = path.join(__dirname, fileName);
-        fs.writeFileSync(filePath, transcript, 'utf8');
-
+        const fileName = `transcript-${channel.name}.txt`;
         const openedAt = data? new Date(data.openedAt) : new Date();
         const closedAt = new Date();
-
         const openedByText = data? `${data.openedByTag}:${data.openedBy}` : 'Unknown:Unknown';
         const claimedByText = data?.claimedBy? `${data.claimedByTag}:${data.claimedBy}` : 'None:None';
         const closedByText = `${closerUser.tag}:${closerUser.id}`;
         const totalMsg = data? data.messages : msgs.size;
 
         const logContainer = new ContainerBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+     .addTextDisplayComponents(new TextDisplayBuilder().setContent(
 `### Ticket Information
 Opened By:
 \`${openedByText}\`
@@ -88,17 +77,14 @@ Total Messages: \`${totalMsg}\`
 Closed At: ${closedAt.toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' })}
 Opened At: ${openedAt.toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' })}`
         ))
-      .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
+     .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
 
         await logCh.send({
             components: [logContainer],
-            files: [{ attachment: filePath, name: `transcript-${channel.name}.txt` }],
+            files: [{ attachment: Buffer.from(transcript, 'utf-8'), name: fileName }],
             flags: MessageFlags.IsComponentsV2
         });
-
-        fs.unlinkSync(filePath);
     } catch(e){ console.error('Log error:', e); }
-
     ticketsData.delete(channel.id);
     await channel.delete().catch(()=>{});
 }
@@ -188,7 +174,6 @@ To close this ticket, use the button below.
     return c;
 }
 
-// Mesaj sayacı
 client.on('messageCreate', async (msg) => {
     if(msg.author.bot) return;
     if(ticketsData.has(msg.channel.id)){
@@ -246,8 +231,8 @@ client.on('interactionCreate', async i => {
             if(sub==='closerequest'){
                 const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
                 const cont = new ContainerBuilder()
-              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
-              .addActionRowComponents(new ActionRowBuilder().addComponents(
+             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`))
+             .addActionRowComponents(new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary),
                         new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)
                     ));
@@ -294,8 +279,8 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
                 if(votes.size>=5){
                     const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
                     const c=new ContainerBuilder()
-                  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
-                  .addMediaGalleryComponents(getBannerGallery());
+                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`))
+                 .addMediaGalleryComponents(getBannerGallery());
                     await i.message.edit({ components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
                     votes.clear();
@@ -331,8 +316,8 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
             const sub = i.options.getSubcommand();
             if(sub==='shutdown'){
                 const c=new ContainerBuilder()
-              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`))
-              .addMediaGalleryComponents(getBannerGallery());
+             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`))
+             .addMediaGalleryComponents(getBannerGallery());
                 return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
             if(sub==='vote'){
@@ -343,16 +328,16 @@ If there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(
             if(sub==='startup'){
                 const v=i.options.getString('voters')||'No voters';
                 const c=new ContainerBuilder()
-              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`))
-              .addMediaGalleryComponents(getBannerGallery());
+             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`))
+             .addMediaGalleryComponents(getBannerGallery());
                 await i.reply({ content: '@here' });
                 return i.followUp({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
             if(sub==='full'){
                 const ts=Math.floor(Date.now()/1000);
                 const c=new ContainerBuilder()
-              .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`))
-              .addMediaGalleryComponents(getBannerGallery());
+             .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`))
+             .addMediaGalleryComponents(getBannerGallery());
                 return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
             }
         }
