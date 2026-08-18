@@ -1,190 +1,27 @@
 const http = require('http');
-http.createServer((req,res)=>{ res.writeHead(200); res.end('CA Bot Live'); }).listen(process.env.PORT || 3000);
+http.createServer((req,res)=>{ res.writeHead(200); res.end('OK'); }).listen(process.env.PORT || 10000);
 
-const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ContainerBuilder, TextDisplayBuilder, MediaGalleryItemBuilder, SeparatorSpacingSize, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, FileBuilder } = require('discord.js');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
+const { Client, GatewayIntentBits } = require('discord.js');
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const TICKET_LOGS_CHANNEL = '1493988234085269654';
-const GUILD_ID = '1477713335314157779'; // <--- SUNUCU ID'N - sağ tık sunucuya kopyala
-
-const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
-const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
-const SESSION_MANAGER_ID = '1477713335389655248';
-const SUPPORT_TEAM_ID = '1493988230406733874';
-const BANNER_FILE = './LAB_1.png';
-const BANNER_URL = 'attachment://LAB_1.png';
-
-let votes = new Set();
-let voteUsers = [];
-const ticketsData = new Map();
-
-function getBannerGallery(){ return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL)); }
-function buildVotePanel() {
-    const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
-    return new ContainerBuilder()
-.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Vote\n> 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.\n\n**Voters:**\n${votersText}`))
-.addMediaGalleryComponents(getBannerGallery())
-.addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)));
-}
-
-async function closeTicketWithLog(channel, closerUser){
-    const data = ticketsData.get(channel.id);
-    const logCh = await channel.guild.channels.fetch(TICKET_LOGS_CHANNEL).catch(()=>null);
-    if(!logCh) { ticketsData.delete(channel.id); return channel.delete().catch(()=>{}); }
-    try{
-        const msgs = await channel.messages.fetch({ limit: 100 });
-        const sorted = msgs.sort((a,b) => a.createdTimestamp - b.createdTimestamp);
-        let transcript = `Transcript for ${channel.name} - ${new Date().toLocaleString('tr-TR')}\n\n`;
-        sorted.forEach(m => { transcript += `[${new Date(m.createdTimestamp).toLocaleString('tr-TR')}] ${m.author.tag}: ${m.content || '[Embed/Attachment]'}\n`; });
-        const fileName = `transcript-${channel.name}.txt`;
-        const openedAt = data? new Date(data.openedAt) : new Date();
-        const closedAt = new Date();
-        const openedByText = data? `${data.openedByTag}:${data.openedBy}` : 'Unknown:Unknown';
-        const claimedByText = data?.claimedBy? `${data.claimedByTag}:${data.claimedBy}` : 'None:None';
-        const closedByText = `${closerUser.tag}:${closerUser.id}`;
-        const totalMsg = data? data.messages : msgs.size;
-        const logContainer = new ContainerBuilder()
-   .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### Ticket Information\nOpened By:\n\`${openedByText}\`\nClaimed By: \`${claimedByText}\`\nClosed By:\n\`${closedByText}\`\n---\n### Misc Information\nTotal Messages: \`${totalMsg}\`\nClosed At: ${closedAt.toLocaleString('tr-TR')}\nOpened At: ${openedAt.toLocaleString('tr-TR')}`))
-   .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
-        await logCh.send({ components: [logContainer], files: [{ attachment: Buffer.from(transcript, 'utf-8'), name: fileName }], flags: MessageFlags.IsComponentsV2 });
-    } catch(e){ console.error('Log error:', e); }
-    ticketsData.delete(channel.id);
-    await channel.delete().catch(()=>{});
-}
+const GUILD_ID = '1493988229734162572'; // sunucu id
 
 client.once('clientReady', async () => {
-    console.log(`✅ ${client.user.tag} READY`);
-    client.user.setPresence({ activities: [{ name: '.gg/carpp', type: 0, state: 'Join our server and apply for CARPP!' }], status: 'online' });
-
-    const commands = [
-        { name: 'ticket', description: 'Ticket system', options: [{ name: 'setup', description: 'Setup V2 panel', type: 1 }, { name: 'close', description: 'Close ticket', type: 1 }, { name: 'closerequest', description: 'Request close', type: 1 }, { name: 'rename', description: 'Rename ticket', type: 1, options: [{ name: 'name', description: 'New name', type: 3, required: true }] }, { name: 'add', description: 'Add user', type: 1, options: [{ name: 'user', description: 'User', type: 6, required: true }] }, { name: 'remove', description: 'Remove user', type: 1, options: [{ name: 'user', description: 'User', type: 6, required: true }] }]},
-        { name: 'session', description: 'Session', options: [{ name: 'full', description: 'Session full', type: 1 }, { name: 'startup', description: 'Startup', type: 1, options: [{ name: 'voters', description: 'Voters list', type: 3, required: false }] }, { name: 'vote', description: 'Start vote', type: 1 }, { name: 'shutdown', description: 'Shutdown', type: 1 }]},
-        { name: 'claim', description: 'Claim ticket' }, { name: 'unclaim', description: 'Unclaim ticket' }
-    ];
-
-    try {
-        const guild = await client.guilds.fetch(GUILD_ID);
-        await guild.commands.set(commands);
-        console.log('✅ Guild commands loaded instantly');
-    } catch(e){ console.log('Guild load failed:', e.message); }
-    await client.application.commands.set(commands);
+  console.log(`✅ ${client.user.tag} READY - LOGIN SUCCESS`);
+  const guild = await client.guilds.fetch(GUILD_ID).catch(e=>console.log('Guild fetch fail', e.message));
+  if(guild){
+    await guild.commands.set([{ name: 'ping', description: 'test' }]);
+    console.log('✅ /ping yüklendi');
+  }
 });
-
-function panelV2() {
-    const c = new ContainerBuilder();
-    c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL('attachment://assistance.png')));
-    c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## California State Roleplay\n> Welcome to Assistance section. Here you will be able to open a simple ticket of your choice to be directed towards what you desire or have internal issues. Make sure you have proof if your reporting staff members mis-leading into fake reports will get you permanently banned.\n\n**General Support Ticket**\n- Use this ticket type for general questions, assistance with features or inquiries about our community rules.\n\n**Internal Affairs Ticket**\n- Staff Reports.\n- Partnership.\n- Questions.\n\n**High Rank Ticket**\n- HR Reports.\n- In-Game Bug Reports.\n- Question For Ownership.\n\n-# **2026 © California State Roleplay.**`));
-    c.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large).setDivider(true));
-    c.addActionRowComponents(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('select').setPlaceholder('Select Support Category').addOptions({ label: 'General Ticket', value: 'general' }, { label: 'Internal Affairs Ticket', value: 'internal' }, { label: 'High Rank Ticket', value: 'highrank' })));
-    return c;
-}
-function ticketOpened(label, userId) {
-    const c = new ContainerBuilder();
-    c.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${label}\nHello <@${userId}>, your ticket has been created!\n\nThank you for contacting the assistance. Your ticket has been successfully created.\n\nA staff member will be with you shortly to address your inquiry. To help us assist you faster, please provide any relevant details or documents related to your request while you wait.\n\n**Instructions:**\n🔹 Do not ping the staff; we have been notified.\n🔹 Keep the conversation professional.\n\nTo close this ticket, use the button below.\n\n-# Powered by California State Utilities`));
-    c.addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('closerequest').setLabel('Close Request').setStyle(ButtonStyle.Secondary)));
-    return c;
-}
-
-client.on('messageCreate', async (msg) => { if(msg.author.bot) return; if(ticketsData.has(msg.channel.id)){ ticketsData.get(msg.channel.id).messages++; } });
 
 client.on('interactionCreate', async i => {
-    console.log(`[INTERACTION] ${i.isChatInputCommand()? i.commandName : i.customId} by ${i.user.tag}`);
-    try {
-        if(i.isChatInputCommand() && i.commandName === 'ticket' && i.options.getSubcommand() === 'setup') {
-            if (!i.member.roles.cache.has(SESSION_MANAGER_ID) &&!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) return i.reply({ ephemeral: true, content: 'Only Session Manager can use this.' });
-            await i.channel.send({ components: [panelV2()], files: [{ attachment: './assistance.png', name: 'assistance.png' }], flags: MessageFlags.IsComponentsV2 });
-            return i.reply({ ephemeral: true, content: 'Panel deployed successfully.' });
-        }
-        if(i.isStringSelectMenu() && i.customId === 'select') {
-            await i.deferReply({ ephemeral: true });
-            try{
-                const type = i.values[0];
-                let cat = type==='general'?CATS.general:type==='internal'?CATS.internal:CATS.highrank;
-                let allowed = type==='highrank'?ROLES.hr:[ROLES.staff,...ROLES.hr];
-                let tag = type==='highrank'?ROLES.hr.map(id=>`<@&${id}>`).join(' '):`<@&${ROLES.staff}>`;
-                let label = type==='general'?'General Support Ticket':type==='internal'?'Internal Affairs Ticket':'High Rank Ticket';
-                const overwrites = [{ id: i.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, { id: i.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.AttachFiles] }];
-                for(const r of allowed) overwrites.push({ id: r, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-                const ch = await i.guild.channels.create({ name: `ticket-${i.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g,'-').slice(0,90), type: ChannelType.GuildText, parent: cat, topic: i.user.id, permissionOverwrites: overwrites });
-                ticketsData.set(ch.id, { openedBy: i.user.id, openedByTag: i.user.tag, claimedBy: null, claimedByTag: null, openedAt: Date.now(), messages: 0 });
-                await ch.send({ content: `${i.user} ${tag}` });
-                await ch.send({ components: [ticketOpened(label, i.user.id)], flags: MessageFlags.IsComponentsV2 });
-                return i.editReply({ content: `Ticket created: ${ch}` });
-            }catch(err){ console.error(err); return i.editReply({ content: `Error: ${err.message}` }); }
-        }
-        if(i.isChatInputCommand() && i.commandName === 'ticket') {
-            const sub = i.options.getSubcommand();
-            if (sub!== 'setup' &&!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ ephemeral: true, content: 'Only Support Team can use ticket commands.' });
-            if(sub==='close'){ await i.reply({ content: 'Closing ticket and logging...' }); await closeTicketWithLog(i.channel, i.user); return; }
-            if(sub==='closerequest'){
-                const owner = i.channel.topic?.match(/\d{17,20}/)?.[0];
-                const cont = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hi <@${owner}>, we are requesting to close your ticket. Press Continue to close or Cancel to keep open.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)));
-                return i.reply({ content: `<@${owner}>`, components: [cont], flags: MessageFlags.IsComponentsV2 });
-            }
-            if(sub==='rename'){ await i.channel.setName(i.options.getString('name')); return i.reply({ content: `Renamed.` }); }
-            if(sub==='add'){ const u=i.options.getUser('user'); await i.channel.permissionOverwrites.edit(u.id,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true}); return i.reply({ content: `${u} added.` }); }
-            if(sub==='remove'){ const u=i.options.getUser('user'); await i.channel.permissionOverwrites.delete(u.id); return i.reply({ content: `${u} removed.` }); }
-        }
-        if(i.isButton()){
-            if((i.customId==='close' || i.customId==='claim' || i.customId==='closerequest') &&!i.member.roles.cache.has(SUPPORT_TEAM_ID) &&!i.member.roles.cache.has(SESSION_MANAGER_ID)) return i.reply({ ephemeral: true, content: 'Only Support Team can use this button.' });
-            if(i.customId==='close' || i.customId==='close_confirm'){ await i.reply({ content: 'Closing and logging transcript...' }); await closeTicketWithLog(i.channel, i.user); return; }
-            if(i.customId==='cancel_close') return i.reply({ ephemeral: true, content: 'Cancelled.' });
-            if(i.customId==='closerequest'){
-                const ownerId = i.channel.topic?.match(/\d{17,20}/)?.[0];
-                const cont = new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Close Request\nHi, <@${ownerId}>, we're requesting to close your ticket. If you do not wish to have your ticket closed, press the cancel button. If you think that your ticket is completed, press the continue button.\n\nIf there is no reply for 24+ hours, we'll close this.`)).addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_confirm').setLabel('Continue').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('cancel_close').setLabel('Cancel').setStyle(ButtonStyle.Danger)));
-                return i.reply({ components:[cont], flags:MessageFlags.IsComponentsV2 });
-            }
-            if(i.customId==='claim'){
-                if(ticketsData.has(i.channel.id)){ ticketsData.get(i.channel.id).claimedBy = i.user.id; ticketsData.get(i.channel.id).claimedByTag = i.user.tag; }
-                await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
-            }
-            if(i.customId==='vote_btn'){
-                await i.deferReply({ ephemeral: true });
-                if(votes.has(i.user.id)) return i.editReply({ content:'You have already voted.' });
-                votes.add(i.user.id);
-                voteUsers.push({ id: i.user.id, tag: i.user.username });
-                if(votes.size>=5){
-                    const finalVoters = voteUsers.map(u => `🔹 <@${u.id}>`).join('\n');
-                    const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n**Voters:**\n${finalVoters}`)).addMediaGalleryComponents(getBannerGallery());
-                    await i.message.edit({ components:[buildVotePanel()], flags:MessageFlags.IsComponentsV2 }).catch(()=>{});
-                    await i.channel.send({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
-                    votes.clear(); voteUsers = [];
-                    return i.editReply({ content:'5/5 - Session starting!' });
-                }
-                await i.message.edit({ components:[buildVotePanel()], flags:MessageFlags.IsComponentsV2 }).catch(()=>{});
-                return i.editReply({ content:`Your vote counted! (${votes.size}/5)` });
-            }
-        }
-        if(i.isChatInputCommand() && i.commandName === 'claim'){
-            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ ephemeral: true, content: 'Only Support Team can claim.' });
-            if(ticketsData.has(i.channel.id)){ ticketsData.get(i.channel.id).claimedBy = i.user.id; ticketsData.get(i.channel.id).claimedByTag = i.user.tag; }
-            await i.channel.permissionOverwrites.edit(i.user.id,{ViewChannel:true,SendMessages:true}); return i.reply({ content: `Claimed by ${i.user}` });
-        }
-        if(i.isChatInputCommand() && i.commandName === 'unclaim'){
-            if (!i.member.roles.cache.has(SUPPORT_TEAM_ID)) return i.reply({ ephemeral: true, content: 'Only Support Team can unclaim.' });
-            if(ticketsData.has(i.channel.id)){ ticketsData.get(i.channel.id).claimedBy = null; ticketsData.get(i.channel.id).claimedByTag = null; }
-            return i.reply({ content: 'Unclaimed' });
-        }
-        if(i.isChatInputCommand() && i.commandName === 'session'){
-            if (!i.member.roles.cache.has(SESSION_MANAGER_ID)) return i.reply({ ephemeral: true, content: 'Only Session Manager can use session commands.' });
-            const sub = i.options.getSubcommand();
-            if(sub==='shutdown'){
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Shutdown\n> We've closed our in-game session to players! We ask that you do not join until you are notified of the session being open. Do not ping our staff to host a session, if you will join to the game, you will be kicked. Thanks.`)).addMediaGalleryComponents(getBannerGallery());
-                return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
-            }
-            if(sub==='vote'){ votes.clear(); voteUsers = []; return i.reply({ content: `@here <@&1477713335314157784>`, components:[buildVotePanel()], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2, allowedMentions: { parse: ['everyone','roles'] } }); }
-            if(sub==='startup'){
-                const v=i.options.getString('voters')||'No voters';
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Start Up\n> The California State Roleplay directive team has decided to start the session. All voters must join the game within 15 minutes and remain in the game for at least 15 minutes. We wish you good games.\n\n> Voters:\n${v}`)).addMediaGalleryComponents(getBannerGallery());
-                await i.reply({ content: '@here' });
-                return i.followUp({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
-            }
-            if(sub==='full'){
-                const ts=Math.floor(Date.now()/1000);
-                const c=new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Full\n> The session has now reached a maximum of 50 players. This does not mean you cannot join. You can join the game after waiting a short while.\n\n> Full Since: <t:${ts}:R>`)).addMediaGalleryComponents(getBannerGallery());
-                return i.reply({ components:[c], files: [{ attachment: BANNER_FILE, name: 'LAB_1.png' }], flags:MessageFlags.IsComponentsV2 });
-            }
-        }
-    } catch(e){ console.error(e); if(i.deferred || i.replied) await i.editReply({ content:'Error: '+e.message }).catch(()=>{}); else await i.reply({ ephemeral: true, content:'Error: '+e.message }).catch(()=>{}); }
+  console.log('INTERACTION GELDI:', i.commandName);
+  if(i.commandName === 'ping'){
+    await i.reply({ content: 'Bot çalışıyor kanka ✅', ephemeral: true });
+  }
 });
-client.login(process.env.TOKEN);
+
+client.login(process.env.TOKEN)
+  .then(()=>console.log('Login denendi'))
+  .catch(e=>console.error('LOGIN FAILED:', e));
