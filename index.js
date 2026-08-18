@@ -5,6 +5,8 @@ const { Client, GatewayIntentBits, ChannelType, MediaGalleryBuilder, Permissions
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 
 const TICKET_LOGS_CHANNEL = '1493988234085269654';
+const GUILD_ID = '1477713335314157779'; // <--- SUNUCU ID'N - sağ tık sunucuya kopyala
+
 const CATS = { general: "1493988237830787155", internal: "1507523007524896888", highrank: "1507522925602013425" };
 const ROLES = { staff: "1493988230406733874", hr: ["1516842866255724554", "1507497692312506448", "1507864277023985765"] };
 const SESSION_MANAGER_ID = '1477713335389655248';
@@ -19,11 +21,10 @@ const ticketsData = new Map();
 function getBannerGallery(){ return new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(BANNER_URL)); }
 function buildVotePanel() {
     const votersText = voteUsers.length > 0? voteUsers.map(u => `🔹 <@${u.id}> (${u.tag})`).join('\n') : 'No votes yet.';
-    const c = new ContainerBuilder()
+    return new ContainerBuilder()
 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`# Session Vote\n> 5+ votes are required for the session to start; if you want to vote, click the button below. If you have voted, you must stay in the game for at least 15 minutes.\n\n**Voters:**\n${votersText}`))
 .addMediaGalleryComponents(getBannerGallery())
 .addActionRowComponents(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('vote_btn').setLabel('Vote').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('vote_count').setLabel(`Votes: ${votes.size}/5`).setStyle(ButtonStyle.Secondary).setDisabled(true)));
-    return c;
 }
 
 async function closeTicketWithLog(channel, closerUser){
@@ -43,22 +44,30 @@ async function closeTicketWithLog(channel, closerUser){
         const closedByText = `${closerUser.tag}:${closerUser.id}`;
         const totalMsg = data? data.messages : msgs.size;
         const logContainer = new ContainerBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### Ticket Information\nOpened By:\n\`${openedByText}\`\nClaimed By: \`${claimedByText}\`\nClosed By:\n\`${closedByText}\`\n---\n### Misc Information\nTotal Messages: \`${totalMsg}\`\nClosed At: ${closedAt.toLocaleString('tr-TR')}\nOpened At: ${openedAt.toLocaleString('tr-TR')}`))
-    .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
+   .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### Ticket Information\nOpened By:\n\`${openedByText}\`\nClaimed By: \`${claimedByText}\`\nClosed By:\n\`${closedByText}\`\n---\n### Misc Information\nTotal Messages: \`${totalMsg}\`\nClosed At: ${closedAt.toLocaleString('tr-TR')}\nOpened At: ${openedAt.toLocaleString('tr-TR')}`))
+   .addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
         await logCh.send({ components: [logContainer], files: [{ attachment: Buffer.from(transcript, 'utf-8'), name: fileName }], flags: MessageFlags.IsComponentsV2 });
     } catch(e){ console.error('Log error:', e); }
     ticketsData.delete(channel.id);
     await channel.delete().catch(()=>{});
 }
 
-client.once('ready', async () => {
-    console.log(`✅ ${client.user.tag} FINAL FIXED`);
+client.once('clientReady', async () => {
+    console.log(`✅ ${client.user.tag} READY`);
     client.user.setPresence({ activities: [{ name: '.gg/carpp', type: 0, state: 'Join our server and apply for CARPP!' }], status: 'online' });
-    await client.application.commands.set([
+
+    const commands = [
         { name: 'ticket', description: 'Ticket system', options: [{ name: 'setup', description: 'Setup V2 panel', type: 1 }, { name: 'close', description: 'Close ticket', type: 1 }, { name: 'closerequest', description: 'Request close', type: 1 }, { name: 'rename', description: 'Rename ticket', type: 1, options: [{ name: 'name', description: 'New name', type: 3, required: true }] }, { name: 'add', description: 'Add user', type: 1, options: [{ name: 'user', description: 'User', type: 6, required: true }] }, { name: 'remove', description: 'Remove user', type: 1, options: [{ name: 'user', description: 'User', type: 6, required: true }] }]},
         { name: 'session', description: 'Session', options: [{ name: 'full', description: 'Session full', type: 1 }, { name: 'startup', description: 'Startup', type: 1, options: [{ name: 'voters', description: 'Voters list', type: 3, required: false }] }, { name: 'vote', description: 'Start vote', type: 1 }, { name: 'shutdown', description: 'Shutdown', type: 1 }]},
         { name: 'claim', description: 'Claim ticket' }, { name: 'unclaim', description: 'Unclaim ticket' }
-    ]);
+    ];
+
+    try {
+        const guild = await client.guilds.fetch(GUILD_ID);
+        await guild.commands.set(commands);
+        console.log('✅ Guild commands loaded instantly');
+    } catch(e){ console.log('Guild load failed:', e.message); }
+    await client.application.commands.set(commands);
 });
 
 function panelV2() {
@@ -79,6 +88,7 @@ function ticketOpened(label, userId) {
 client.on('messageCreate', async (msg) => { if(msg.author.bot) return; if(ticketsData.has(msg.channel.id)){ ticketsData.get(msg.channel.id).messages++; } });
 
 client.on('interactionCreate', async i => {
+    console.log(`[INTERACTION] ${i.isChatInputCommand()? i.commandName : i.customId} by ${i.user.tag}`);
     try {
         if(i.isChatInputCommand() && i.commandName === 'ticket' && i.options.getSubcommand() === 'setup') {
             if (!i.member.roles.cache.has(SESSION_MANAGER_ID) &&!i.member.permissions.has(PermissionsBitField.Flags.Administrator)) return i.reply({ ephemeral: true, content: 'Only Session Manager can use this.' });
@@ -100,7 +110,7 @@ client.on('interactionCreate', async i => {
                 await ch.send({ content: `${i.user} ${tag}` });
                 await ch.send({ components: [ticketOpened(label, i.user.id)], flags: MessageFlags.IsComponentsV2 });
                 return i.editReply({ content: `Ticket created: ${ch}` });
-            }catch(err){ return i.editReply({ content: `Error: ${err.message}` }); }
+            }catch(err){ console.error(err); return i.editReply({ content: `Error: ${err.message}` }); }
         }
         if(i.isChatInputCommand() && i.commandName === 'ticket') {
             const sub = i.options.getSubcommand();
